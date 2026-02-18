@@ -112,27 +112,36 @@ def display_metrics(term, metrics, iteration_type="continuous", history_data=Non
         # In non-continuous mode, we don't use blessed's move_xy for text output
         # so we just build plain strings and print them.
         # Clearing is handled by os.system('clear') before calling this function.
-        frame_output += term.bold_white + "GPU Monitor" + term.normal + "\n"
-        frame_output += term.bold_white + "===============" + term.normal + "\n\n"
+        frame_output += term.bold_white + "GPU Monitor" + term.normal + "
+"
+        frame_output += term.bold_white + "===============" + term.normal + "
+
+"
         current_line = current_line_start # Use the passed start line
 
-    frame_output += (term.move_xy(0, current_line) if iteration_type == "continuous" else "") + \
-                    f"{term.green}{'GPU Utilization':<{LABEL_PAD}}{term.normal}: {gpu_util}%\n"
+    frame_output += (term.move_xy(0, current_line) if iteration_type == "continuous" else "") + 
+                    f"{term.green}{'GPU Utilization':<{LABEL_PAD}}{term.normal}: {gpu_util}%
+"
     current_line += 1 if iteration_type == "continuous" else 1
-    frame_output += (term.move_xy(0, current_line) if iteration_type == "continuous" else "") + \
-                    f"{term.blue}{'Memory Utilization':<{LABEL_PAD}}{term.normal}: {mem_util}%\n"
+    frame_output += (term.move_xy(0, current_line) if iteration_type == "continuous" else "") + 
+                    f"{term.blue}{'Memory Utilization':<{LABEL_PAD}}{term.normal}: {mem_util}%
+"
     current_line += 1 if iteration_type == "continuous" else 1
-    frame_output += (term.move_xy(0, current_line) if iteration_type == "continuous" else "") + \
-                    f"{term.cyan}{'VRAM':<{LABEL_PAD}}{term.normal}: {used_vram // 1024 // 1024}MB / {total_vram // 1024 // 1024}MB\n"
+    frame_output += (term.move_xy(0, current_line) if iteration_type == "continuous" else "") + 
+                    f"{term.cyan}{'VRAM':<{LABEL_PAD}}{term.normal}: {used_vram // 1024 // 1024}MB / {total_vram // 1024 // 1024}MB
+"
     current_line += 1 if iteration_type == "continuous" else 1
-    frame_output += (term.move_xy(0, current_line) if iteration_type == "continuous" else "") + \
-                    f"{term.red}{'Temperatures':<{LABEL_PAD}}{term.normal}: Edge={edge_temp}°C, Junction={junction_temp}°C, Memory={mem_temp}°C\n"
+    frame_output += (term.move_xy(0, current_line) if iteration_type == "continuous" else "") + 
+                    f"{term.red}{'Temperatures':<{LABEL_PAD}}{term.normal}: Edge={edge_temp}°C, Junction={junction_temp}°C, Memory={mem_temp}°C
+"
     current_line += 1 if iteration_type == "continuous" else 1
-    frame_output += (term.move_xy(0, current_line) if iteration_type == "continuous" else "") + \
-                    f"{term.magenta}{'Clocks':<{LABEL_PAD}}{term.normal}: sclk={sclk}MHz, mclk={mclk}MHz\n"
+    frame_output += (term.move_xy(0, current_line) if iteration_type == "continuous" else "") + 
+                    f"{term.magenta}{'Clocks':<{LABEL_PAD}}{term.normal}: sclk={sclk}MHz, mclk={mclk}MHz
+"
     current_line += 1 if iteration_type == "continuous" else 1
-    frame_output += (term.move_xy(0, current_line) if iteration_type == "continuous" else "") + \
-                    f"{term.yellow}{'Power':<{LABEL_PAD}}{term.normal}: {power}W, Fan: {fan}RPM\n"
+    frame_output += (term.move_xy(0, current_line) if iteration_type == "continuous" else "") + 
+                    f"{term.yellow}{'Power':<{LABEL_PAD}}{term.normal}: {power}W, Fan: {fan}RPM
+"
     current_line += 2 if iteration_type == "continuous" else 1 # Add a blank line for spacing
 
     if iteration_type == "continuous": # Only draw histograms if in continuous mode
@@ -229,7 +238,8 @@ def main():
             except KeyboardInterrupt:
                 pass # Handled by blessed's cbreak and fullscreen context
             finally:
-                print(term.normal + "\n") # Ensure cursor and colors are reset
+                print(term.normal + "
+") # Ensure cursor and colors are reset
     else: # Finite iterations, print directly to stdout with clearing
         try:
             while iteration_count < args.iterations:
