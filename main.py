@@ -3,7 +3,8 @@ import time
 import glob
 from blessed import Terminal
 
-HISTORY_LENGTH = 80 # Number of data points to keep for history graphs
+# HISTORY_LENGTH will be dynamic based on terminal width
+# graph_height will be dynamic based on terminal height
 
 def find_amd_gpu_card():
     """Finds the AMD GPU card directory."""
@@ -100,9 +101,12 @@ def main():
         print("Could not find hwmon directory for the AMD GPU.")
         return
 
-    gpu_util_history = [0] * HISTORY_LENGTH
-    mem_util_history = [0] * HISTORY_LENGTH
-    temp_junction_history = [0] * HISTORY_LENGTH
+    # Initialize histories with dynamic length
+    gpu_util_history = [0] * (term.width - 2) # Leave some margin
+    mem_util_history = [0] * (term.width - 2)
+    temp_junction_history = [0] * (term.width - 2)
+    
+    HISTORY_LENGTH = term.width - 2
 
     with term.fullscreen(), term.cbreak(), term.hidden_cursor():
         try:
@@ -141,8 +145,14 @@ def main():
                         print(term.move_xy(0, current_line) + f"Power: {power}W, Fan: {fan}RPM")
                         current_line += 2 # Add a blank line for spacing
 
-                        # Draw graphs below the stats
-                        graph_height = 8 # Fixed height for graphs
+                        # Calculate available height for graphs
+                        stats_lines = 8 # Number of lines used by text stats
+                        lines_per_graph_label = 1 # Each graph label takes 1 line
+                        total_graph_labels_lines = 3 * lines_per_graph_label
+                        
+                        available_height_for_graphs = term.height - current_line - total_graph_labels_lines - 1 # -1 for bottom margin
+                        graph_height = max(3, available_height_for_graphs // 3) # Min height of 3 per graph
+
                         graph_start_x = 0 # Starting X position for graphs
 
                         # GPU Utilization Graph
