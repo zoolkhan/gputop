@@ -3,7 +3,7 @@
 
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 VENV_PYTHON="$SCRIPT_DIR/venv/bin/python3"
-# Now points to gputop.py for V0.3 development
+# Now points to gputop.py for V1.0 development
 APP_SCRIPT="$SCRIPT_DIR/gputop.py" 
 
 # Check if virtual environment Python exists

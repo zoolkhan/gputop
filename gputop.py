@@ -8,6 +8,22 @@ from blessed import Terminal
 # HISTORY_LENGTH will be dynamic based on terminal width
 # graph_height will be dynamic based on terminal height
 
+def get_gpu_model():
+    """Gets the GPU model name using lspci."""
+    try:
+        import subprocess
+        output = subprocess.check_output("lspci -d 1002:", shell=True).decode()
+        for line in output.splitlines():
+            if "VGA compatible controller" in line or "Display controller" in line:
+                # Extract the part after the colon
+                model = line.split(":", 2)[-1].strip()
+                # Remove [AMD/ATI] prefix if present
+                model = model.replace("[AMD/ATI]", "").strip()
+                return model
+    except Exception:
+        pass
+    return "AMD GPU"
+
 def find_amd_gpu_card():
     """Finds the AMD GPU card directory."""
     for card in glob.glob("/sys/class/drm/card*"):
@@ -70,20 +86,73 @@ def get_power_and_fan(hwmon_dir):
         fan = int(f.read().strip())
     return power, fan
 
-def draw_history_graph(term, history, max_value, height, start_y, start_x, color):
-    """Draws a historical line graph using block characters."""
+def get_color(term, value, max_value):
+    """Returns a color based on the value's percentage of max_value."""
+    percentage = (value / max_value) * 100
+    if percentage < 50:
+        return term.green
+    elif percentage < 70:
+        return term.yellow
+    elif percentage < 90:
+        return term.orange if hasattr(term, 'orange') else term.color(208) # ANSI 208 is orange
+    else:
+        return term.red
+
+def draw_history_graph(term, history, max_value, height, start_y, start_x, history_type="percent", total_vram=0, min_value=0):
+    """Draws a historical line graph using braille characters with color gradients."""
     output = ""
+    # BRAILLE_BARS: 0, 1, 2, 3, 4 rows filled (bottom to top)
+    BRAILLE_BARS = [' ', '⣀', '⣤', '⣶', '⣿']
+    
+    # Draw Y-axis labels
+    label_count = 5
+    range_val = max_value - min_value
+    for i in range(label_count):
+        label_val = min_value + int((range_val / (label_count - 1)) * i)
+        if history_type == "memory":
+            if label_val >= 1024**3:
+                label_str = f"{label_val // 1024**3}G"
+            elif label_val >= 1024**2:
+                label_str = f"{label_val // 1024**2}M"
+            else:
+                label_str = f"{label_val // 1024}K"
+        elif history_type == "temp":
+            label_str = f"{label_val}°C"
+        else:
+            label_str = f"{label_val}%"
+        
+        y_pos = start_y + height - 1 - int((i / (label_count - 1)) * (height - 1))
+        # f"{label_str:>5}┤" ensures consistent alignment if label_str is up to 5 chars (e.g. 120°C)
+        output += term.move_xy(0, y_pos) + term.white + f"{label_str:>5}┤" + term.normal
+
     # Ensure graph is cleared for the given area
+    graph_start_x = start_x + 6 # Offset for Y-axis labels
     for y_clear in range(height):
-        output += term.move_xy(start_x, start_y + y_clear) + ' ' * len(history)
+        output += term.move_xy(graph_start_x, start_y + y_clear) + ' ' * len(history)
 
     for x, value in enumerate(history):
-        scaled_value = int((value / max_value) * height)
-        if scaled_value > height: scaled_value = height
-        if value > 0 and scaled_value == 0: scaled_value = 1
+        color = get_color(term, value, max_value)
+        # Total vertical dots available: height * 4
+        total_dots = height * 4
+        
+        # Scale value relative to [min_value, max_value]
+        val_rel = max(0, value - min_value)
+        scaled_dots = int((val_rel / range_val) * total_dots) if range_val > 0 else 0
+        
+        if scaled_dots > total_dots: scaled_dots = total_dots
+        if val_rel > 0 and scaled_dots == 0: scaled_dots = 1
 
-        for y_draw in range(scaled_value):
-            output += term.move_xy(start_x + x, start_y + height - 1 - y_draw) + color + '█' + term.normal
+        full_chars = scaled_dots // 4
+        partial_dots = scaled_dots % 4
+        
+        # Draw full characters from bottom up
+        for y_full in range(full_chars):
+            output += term.move_xy(graph_start_x + x, start_y + height - 1 - y_full) + color + '⣿' + term.normal
+        
+        # Draw partial character if needed
+        if partial_dots > 0 and full_chars < height:
+            output += term.move_xy(graph_start_x + x, start_y + height - 1 - full_chars) + color + BRAILLE_BARS[partial_dots] + term.normal
+            
     return output
 
 def collect_metrics(card_device_dir, hwmon_dir):
@@ -96,7 +165,7 @@ def collect_metrics(card_device_dir, hwmon_dir):
     power, fan = get_power_and_fan(hwmon_dir)
     return gpu_util, mem_util, used_vram, total_vram, edge_temp, junction_temp, mem_temp, sclk, mclk, power, fan
 
-def display_metrics(term, metrics, iteration_type="continuous", history_data=None, current_line_start=0, HISTORY_LENGTH=0):
+def display_metrics(term, metrics, iteration_type="continuous", history_data=None, current_line_start=0, HISTORY_LENGTH=0, gpu_name="AMD GPU"):
     """Displays the collected metrics."""
     gpu_util, mem_util, used_vram, total_vram, edge_temp, junction_temp, mem_temp, sclk, mclk, power, fan = metrics
     frame_output = ""
@@ -106,15 +175,15 @@ def display_metrics(term, metrics, iteration_type="continuous", history_data=Non
                     len("VRAM"), len("Temperatures"), len("Clocks"), len("Power")) + 2 # +2 for ": "
 
     if iteration_type == "continuous":
-        frame_output += term.move_xy(0, 0) + term.center(term.bold_white + "GPU Monitor V0.3 by OH8XAT" + term.normal)
-        frame_output += term.move_xy(0, 1) + term.center(term.bold_white + "===============" + term.normal)
-        current_line = 4
+        frame_output += term.move_xy(0, 0) + term.center(term.blue + "GPU Monitor V1.0 by OH8XAT" + term.normal)
+        frame_output += term.move_xy(0, 1) + term.center(term.cyan + gpu_name + term.normal)
+        current_line = 3
     else: # single/finite iterations
         # In non-continuous mode, we don't use blessed's move_xy for text output
         # so we just build plain strings and print them.
         # Clearing is handled by os.system('clear') before calling this function.
-        frame_output += term.bold_white + "GPU Monitor V0.3 by OH8XAT" + term.normal + "\n"
-        frame_output += term.bold_white + "===============" + term.normal + "\n\n"
+        frame_output += term.blue + "GPU Monitor V1.0 by OH8XAT" + term.normal + "\n"
+        frame_output += term.cyan + gpu_name + term.normal + "\n\n"
         current_line = current_line_start # Use the passed start line
 
     frame_output += (term.move_xy(0, current_line) if iteration_type == "continuous" else "") + \
@@ -137,7 +206,7 @@ def display_metrics(term, metrics, iteration_type="continuous", history_data=Non
     current_line += 2 if iteration_type == "continuous" else 1 # Add a blank line for spacing
 
     if iteration_type == "continuous": # Only draw histograms if in continuous mode
-        gpu_util_history, mem_util_history, temp_junction_history = history_data
+        gpu_util_history, vram_history, temp_junction_history = history_data
         # Calculate available height for graphs
         stats_lines = current_line # Lines used by header and text stats
         lines_per_graph_label = 1 # Each graph label takes 1 line
@@ -151,19 +220,19 @@ def display_metrics(term, metrics, iteration_type="continuous", history_data=Non
         # GPU Utilization Graph
         frame_output += term.move_xy(0, current_line) + term.clear_eol + term.green + "GPU Utilization History:" + term.normal
         current_line += 1
-        frame_output += draw_history_graph(term, gpu_util_history, 100, graph_height, current_line, graph_start_x, term.on_green)
+        frame_output += draw_history_graph(term, gpu_util_history, 100, graph_height, current_line, graph_start_x, "percent")
         current_line += graph_height + 1
 
-        # Memory Utilization Graph
-        frame_output += term.move_xy(0, current_line) + term.clear_eol + term.blue + "Memory Utilization History:" + term.normal
+        # VRAM Usage Graph
+        frame_output += term.move_xy(0, current_line) + term.clear_eol + term.blue + "VRAM Usage History:" + term.normal
         current_line += 1
-        frame_output += draw_history_graph(term, mem_util_history, 100, graph_height, current_line, graph_start_x, term.on_blue)
+        frame_output += draw_history_graph(term, vram_history, total_vram, graph_height, current_line, graph_start_x, "memory")
         current_line += graph_height + 1
 
         # Junction Temperature Graph
         frame_output += term.move_xy(0, current_line) + term.clear_eol + term.red + "Junction Temperature History:" + term.normal
         current_line += 1
-        frame_output += draw_history_graph(term, temp_junction_history, 120, graph_height, current_line, graph_start_x, term.on_red)
+        frame_output += draw_history_graph(term, temp_junction_history, 120, graph_height, current_line, graph_start_x, "temp", min_value=20)
         current_line += graph_height + 1
     
     return frame_output
@@ -188,31 +257,49 @@ def main():
         return
 
     # Initialize histories
-    HISTORY_LENGTH = term.width - 4 if args.iterations == 0 else 0 # No history if not continuous
+    gpu_name = get_gpu_model()
+    HISTORY_LENGTH = term.width - 10 if args.iterations == 0 else 0 # Adjust for Y-axis labels
     gpu_util_history = [0] * HISTORY_LENGTH
-    mem_util_history = [0] * HISTORY_LENGTH
+    vram_history = [0] * HISTORY_LENGTH
     temp_junction_history = [0] * HISTORY_LENGTH
     
+    last_width, last_height = term.width, term.height
     iteration_count = 0
     
     if args.iterations == 0: # Continuous mode with fullscreen
         with term.fullscreen(), term.cbreak(), term.hidden_cursor():
             try:
                 while True:
+                    # Check for resize
+                    if term.width != last_width or term.height != last_height:
+                        last_width, last_height = term.width, term.height
+                        HISTORY_LENGTH = max(10, term.width - 10)
+                        # Re-pad or truncate history to match new width
+                        def resize_history(h, new_len):
+                            if len(h) < new_len:
+                                return [0] * (new_len - len(h)) + h
+                            return h[-new_len:]
+                        gpu_util_history = resize_history(gpu_util_history, HISTORY_LENGTH)
+                        vram_history = resize_history(vram_history, HISTORY_LENGTH)
+                        temp_junction_history = resize_history(temp_junction_history, HISTORY_LENGTH)
+                        print(term.clear)
+
                     with term.location(0, 0):
                         try:
                             metrics = collect_metrics(card_device_dir, hwmon_dir)
-                            gpu_util, mem_util, _, _, edge_temp, junction_temp, _, _, _, _, _ = metrics
+                            gpu_util, mem_util, used_vram, total_vram, edge_temp, junction_temp, _, _, _, _, _ = metrics
 
                             gpu_util_history.append(gpu_util)
                             gpu_util_history = gpu_util_history[-HISTORY_LENGTH:]
-                            mem_util_history.append(mem_util)
-                            mem_util_history = mem_util_history[-HISTORY_LENGTH:]
+                            vram_history.append(used_vram)
+                            vram_history = vram_history[-HISTORY_LENGTH:]
                             temp_junction_history.append(int(junction_temp))
                             temp_junction_history = temp_junction_history[-HISTORY_LENGTH:]
 
                             frame_output = display_metrics(term, metrics, "continuous", 
-                                                           (gpu_util_history, mem_util_history, temp_junction_history))
+                                                           (gpu_util_history, vram_history, temp_junction_history), 
+                                                           HISTORY_LENGTH=HISTORY_LENGTH,
+                                                           gpu_name=gpu_name)
                             print(frame_output, end='')
 
                         except FileNotFoundError as e:
