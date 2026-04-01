@@ -175,14 +175,14 @@ def display_metrics(term, metrics, iteration_type="continuous", history_data=Non
                     len("VRAM"), len("Temperatures"), len("Clocks"), len("Power")) + 2 # +2 for ": "
 
     if iteration_type == "continuous":
-        frame_output += term.move_xy(0, 0) + term.center(term.blue + "GPU Monitor V1.0 by OH8XAT" + term.normal)
+        frame_output += term.move_xy(0, 0) + term.center(term.blue + "gputop V1.0 by OH8XAT" + term.normal)
         frame_output += term.move_xy(0, 1) + term.center(term.cyan + gpu_name + term.normal)
         current_line = 3
     else: # single/finite iterations
         # In non-continuous mode, we don't use blessed's move_xy for text output
         # so we just build plain strings and print them.
         # Clearing is handled by os.system('clear') before calling this function.
-        frame_output += term.blue + "GPU Monitor V1.0 by OH8XAT" + term.normal + "\n"
+        frame_output += term.blue + "gputop V1.0 by OH8XAT" + term.normal + "\n"
         frame_output += term.cyan + gpu_name + term.normal + "\n\n"
         current_line = current_line_start # Use the passed start line
 
